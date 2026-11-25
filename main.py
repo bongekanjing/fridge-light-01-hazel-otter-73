@@ -1,48 +1,74 @@
-"""Write the line to /output/entry.txt.
+#!/usr/bin/env python3
+"""Validate LINE.txt and write it to the output directory.
 
 The line lives in LINE.txt so the bytes judged are the bytes committed:
 nothing is assembled at run time and nothing is fetched over the network.
+
+The destination directory comes from MAKEFUN_OUTPUT_DIR and defaults to
+/output, where the gate looks for entry.txt.
 """
 
 import os
-
-# The gate takes 1 to 200 characters of UTF-8 that is not only white space.
-# Checked here so a bad LINE.txt fails loudly in the build log rather than
-# scoring a silent zero on the board.
-MAX_CHARS = 140
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LINE = os.path.join(HERE, "LINE.txt")
 OUT_NAME = "entry.txt"
 
-with open(LINE, "rb") as handle:
-    raw = handle.read()
+MIN_CHARS = 1
+MAX_CHARS = 140
 
-# A file that is not valid UTF-8 fails the gate: name the problem here rather
-# than half-decode it into something that happens to fit.
-try:
-    text = raw.decode("utf-8")
-except UnicodeDecodeError as exc:
-    raise SystemExit("LINE.txt is not valid UTF-8: %s" % exc)
 
-# A byte-order mark is an encoding artefact, not part of the line.
-if text.startswith("\ufeff"):
-    text = text[1:]
+def die(message):
+    sys.stderr.write("error: %s\n" % message)
+    sys.exit(1)
 
-# Trailing newlines end the file; they are not part of the line.
-line = text.rstrip("\r\n")
 
-if not line.strip():
-    raise SystemExit("LINE.txt is empty or only white space")
-if "\n" in line or "\r" in line:
-    raise SystemExit("LINE.txt holds more than one line")
-if len(line) > MAX_CHARS:
-    raise SystemExit("%d characters, over the %d allowed" % (len(line), MAX_CHARS))
+def main():
+    try:
+        with open(LINE, "rb") as handle:
+            raw = handle.read()
+    except OSError as exc:
+        die("cannot read %s: %s" % (LINE, exc))
 
-out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-os.makedirs(out_dir, exist_ok=True)
-# Write the bytes already checked, so what lands in /output is exactly the
-# text measured above and not a second read of the file on disk.
-with open(os.path.join(out_dir, OUT_NAME), "wb") as handle:
-    handle.write(line.encode("utf-8"))
-print("wrote %s: %d characters, %d bytes" % (OUT_NAME, len(line), len(line.encode("utf-8"))))
+    # A file that is not valid UTF-8 fails the gate: name the problem here
+    # rather than half-decode it into something that happens to fit.
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        die("LINE.txt is not valid UTF-8: %s" % exc)
+
+    # A byte-order mark is an encoding artefact, not part of the line.
+    if text.startswith("\ufeff"):
+        text = text[1:]
+
+    # Trailing newlines end the file; they are not part of the line.
+    line = text.rstrip("\r\n")
+
+    if not line.strip():
+        die("LINE.txt is empty or only white space")
+    if "\n" in line or "\r" in line:
+        die("LINE.txt holds more than one line")
+
+    count = len(line)
+    if count < MIN_CHARS or count > MAX_CHARS:
+        die("%d characters, outside the %d-%d allowed" % (count, MIN_CHARS, MAX_CHARS))
+
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+    except OSError as exc:
+        die("cannot create output dir %s: %s" % (out_dir, exc))
+
+    target = os.path.join(out_dir, OUT_NAME)
+    try:
+        with open(target, "w", encoding="utf-8", newline="") as handle:
+            handle.write(line + "\n")
+    except OSError as exc:
+        die("cannot write %s: %s" % (target, exc))
+
+    print(count)
+
+
+if __name__ == "__main__":
+    main()
