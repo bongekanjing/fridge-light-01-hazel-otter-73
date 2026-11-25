@@ -16,6 +16,7 @@ LINE = os.path.join(HERE, "LINE.txt")
 OUT_NAME = "entry.txt"
 
 MIN_CHARS = 1
+# 140 is this bounty's character cap.
 MAX_CHARS = 140
 
 
